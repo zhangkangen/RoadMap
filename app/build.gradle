@@ -25,4 +25,6 @@ dependencies {
     compile files('libs/baidumapapi_v3_1_1.jar')
     compile files('libs/open_sdk_r4346.jar')
     compile files('libs/commons-codec-1.10.jar')
+    compile files('libs/Volley.jar')
+    compile files('libs/baidumapapi_v3_2_0.jar')
 }

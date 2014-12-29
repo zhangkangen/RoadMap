@@ -1,7 +1,7 @@
 package com.example.roadmap;
 
 import android.app.Activity;
-import android.app.Service;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -21,6 +21,13 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 import com.baidu.location.BDLocation;
 import com.baidu.location.BDLocationListener;
 import com.baidu.location.LocationClient;
@@ -50,7 +57,6 @@ import java.net.SocketTimeoutException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TimerTask;
 
 import com.example.roadmap.common.ActionMode;
 import com.example.roadmap.fragment.GPSDialogFragment;
@@ -72,17 +78,24 @@ public class MyActivity extends ActionBarActivity {
 
     private MapView mMapView;
     private BaiduMap mBaiduMap;
+    private LatLng locLatLng;
 
     private Button btnMapType;
     private ImageButton btnDis;
     private LinearLayout trackModeLayout;
+    private ImageButton btnLoc;
+    private Button btnTrack;
 
     List<LatLng> pointList = new ArrayList<LatLng>();
     List<LatLng> disPointList = new ArrayList<LatLng>();
 
     private float DIS = 0;
     private boolean BTN_DIS_ISCLICK = false;
+    private boolean BTN_LOC_ISCLICK = false;
+    private boolean BTN_TRACK_ISCLICK = false;
     private int TOTAL_DISTANCE = 0;
+    final int MSG_WHAT_TRACK = 0;
+    final int MSG_WHAT_LOC = 1;
 
     private LocationManager locManager;
     private OverlayManager overlayManager;
@@ -113,17 +126,42 @@ public class MyActivity extends ActionBarActivity {
             // TODO Auto-generated method stub
             super.handleMessage(msg);
             switch (msg.what) {
-                case 0:
-                    LatLng point = (LatLng) msg.obj;
-                    motionTrail(point);
+                case MSG_WHAT_TRACK:
+                    locLatLng = (LatLng) msg.obj;
+                    motionTrail(locLatLng);
                     break;
-
+                case MSG_WHAT_LOC:
+                    displayToast("定位成功", Toast.LENGTH_SHORT);
+                    locLatLng = (LatLng)msg.obj;
+                    BTN_LOC_ISCLICK = false;
+                    break;
                 default:
                     break;
             }
 
         }
     };
+
+    //单击事件
+    View.OnClickListener clickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View view) {
+            switch (view.getId()) {
+                case R.id.btn_loc:
+                    BTN_LOC_ISCLICK = true;
+                    break;
+                case R.id.btn_track:
+                    if (BTN_TRACK_ISCLICK) {
+                        BTN_TRACK_ISCLICK = false;
+                    } else {
+                        BTN_TRACK_ISCLICK = true;
+                    }
+                    break;
+            }
+        }
+    };
+
+
     BaiduMap.SnapshotReadyCallback snapshotReadyCallback = new BaiduMap.SnapshotReadyCallback() {
         @Override
         public void onSnapshotReady(Bitmap bitmap) {
@@ -136,14 +174,14 @@ public class MyActivity extends ActionBarActivity {
                 outputStream.close();
                 Bundle params = new Bundle();
                 params.putInt(QQShare.SHARE_TO_QQ_KEY_TYPE, QQShare.SHARE_TO_QQ_TYPE_IMAGE);
-                params.putString(QQShare.SHARE_TO_QQ_IMAGE_LOCAL_URL,filepath);
+                params.putString(QQShare.SHARE_TO_QQ_IMAGE_LOCAL_URL, filepath);
 //                /*params.putString(QQShare.SHARE_TO_QQ_TITLE, "test");
 //                params.putString(QQShare.SHARE_TO_QQ_SUMMARY, "test");
 //                params.putString(QQShare.SHARE_TO_QQ_TARGET_URL, "http://www.baidu.com");
 //                ArrayList<String> imageUrls = new ArrayList<String>();
 //                imageUrls.add(filepath);
 //                params.putStringArrayList(QQShare.SHARE_TO_QQ_IMAGE_URL, imageUrls);*/
-               params.putInt(QQShare.SHARE_TO_QQ_EXT_INT,QQShare.SHARE_TO_QQ_FLAG_QZONE_AUTO_OPEN);
+                params.putInt(QQShare.SHARE_TO_QQ_EXT_INT, QQShare.SHARE_TO_QQ_FLAG_QZONE_AUTO_OPEN);
                 displayToast("doShare");
                 mTencent.shareToQQ(MyActivity.this, params, tencentUiListener);
             } catch (Exception e) {
@@ -237,6 +275,17 @@ public class MyActivity extends ActionBarActivity {
             }
         });
 
+        //定位点单击事件
+        mBaiduMap.setOnMyLocationClickListener(new BaiduMap.OnMyLocationClickListener() {
+            @Override
+            public boolean onMyLocationClick() {
+                if(BTN_DIS_ISCLICK){
+                    getDistance(locLatLng);
+                }
+                return true;
+            }
+        });
+
         //切换地图模式
         btnMapType = (Button) findViewById(R.id.btn_mapType);
         btnMapType.setText("卫星");
@@ -276,21 +325,22 @@ public class MyActivity extends ActionBarActivity {
         //开启定位图层
         mBaiduMap.setMyLocationEnabled(true);
 
-        locManager = (LocationManager) getApplicationContext()
-                .getSystemService(Service.LOCATION_SERVICE);
-        if (locManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            Toast.makeText(context, "GPS已达开", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(context, "请开启GPS！", Toast.LENGTH_SHORT).show();
-            // Intent intent = new
-            // Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);// 跳转到位置设置界面
-            // startActivityForResult(intent, R.layout.activity_main); //
-            // 此为设置完成后返回到获取界面
-            GPSDialogFragment dialogFragment = GPSDialogFragment
-                    .newInstance("打开 GPS ？");
-            dialogFragment.show(getFragmentManager(), "dialog");
-
-        }
+        //打开 GPS 的 dialog，确定后跳转到设置
+//        locManager = (LocationManager) getApplicationContext()
+//                .getSystemService(Service.LOCATION_SERVICE);
+//        if (locManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+//            Toast.makeText(context, "GPS已达开", Toast.LENGTH_SHORT).show();
+//        } else {
+//            //Toast.makeText(context, "请开启GPS！", Toast.LENGTH_SHORT).show();
+//            // Intent intent = new
+//            // Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);// 跳转到位置设置界面
+//            // startActivityForResult(intent, R.layout.activity_main); //
+//            // 此为设置完成后返回到获取界面
+//            GPSDialogFragment dialogFragment = GPSDialogFragment
+//                    .newInstance("打开 GPS ？");
+//            dialogFragment.show(getFragmentManager(), "dialog");
+//
+//        }
 
         LocationClient locClient = new LocationClient(
                 context);
@@ -317,6 +367,15 @@ public class MyActivity extends ActionBarActivity {
                 return false;
             }
         };
+
+        //定位
+        btnLoc = (ImageButton) findViewById(R.id.btn_loc);
+        btnLoc.setOnClickListener(clickListener);
+
+        //轨迹记录
+        btnTrack =(Button)findViewById(R.id.btn_track);
+        btnTrack.setOnClickListener(clickListener);
+
     }
 
     private void initUi() {
@@ -330,6 +389,55 @@ public class MyActivity extends ActionBarActivity {
         if (!mTencent.isSessionValid()) {
             mTencent.login(this, "", tencentUiListener);
         }
+    }
+
+    /**
+     * Volley获取网络数据
+     */
+    public void getJSONByVolley() {
+        String result = null;
+        RequestQueue requestQueue = Volley.newRequestQueue(this);
+        String strUrl = "http://api.showji.com/Locating/www.show.ji.c.o.m.aspx?m=18766586588&output=json&callback=querycallback&timestamp=1409020493933";
+        final ProgressDialog progressDialog = ProgressDialog.show(this,
+                "this is title", "...loading...");
+
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, strUrl, null, new Response.Listener<JSONObject>() {
+
+            @Override
+            public void onResponse(JSONObject jsonObject) {
+
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError volleyError) {
+
+            }
+        });
+
+        StringRequest getRequest = new StringRequest(Request.Method.GET,
+                strUrl, new Response.Listener<String>() {
+
+            @Override
+            public void onResponse(String arg0) {
+                // TODO Auto-generated method stub
+                if (progressDialog.isShowing() && progressDialog != null) {
+                    progressDialog.dismiss();
+                }
+                //接收返回数据
+            }
+        }, new Response.ErrorListener() {
+
+            @Override
+            public void onErrorResponse(VolleyError arg0) {
+                // TODO Auto-generated method stub
+                if (progressDialog.isShowing() && progressDialog != null) {
+                    progressDialog.dismiss();
+                }
+
+                displayToast("出现了错误");
+            }
+        });
+        requestQueue.add(getRequest);
     }
 
     public void onClickShare() {
@@ -353,6 +461,7 @@ public class MyActivity extends ActionBarActivity {
         //如果是第一个定位点，直接添加
         if (pointList.size() < 1) {
             pointList.add(latLng);
+            return;
         } else if (DistanceUtil.getDistance(latLng,
                 pointList.get(pointList.size() - 1)) > 10) {
             pointList.add(latLng);
@@ -407,7 +516,6 @@ public class MyActivity extends ActionBarActivity {
             disPointList.add(latLng);
             // 画点
             drawDot(disPointList);
-
         }
     }
 
@@ -463,6 +571,10 @@ public class MyActivity extends ActionBarActivity {
         Toast.makeText(context, str, Toast.LENGTH_LONG).show();
     }
 
+    public void displayToast(String str, int longOrShort) {
+        Toast.makeText(this, str, longOrShort).show();
+    }
+
     private void shareToQzoneClick() {
         mBaiduMap.snapshot(snapshotReadyCallback);
     }
@@ -513,13 +625,8 @@ public class MyActivity extends ActionBarActivity {
                 return;
 
             int locType = location.getLocType();
-
-
             if (locType == BDLocation.TypeGpsLocation
                     || locType == BDLocation.TypeNetWorkLocation) {
-
-
-                Log.i("TAG", String.valueOf(locType));
 
                 float direction = location.getDirection();
                 // displayToast(String.valueOf(direction));
@@ -536,14 +643,26 @@ public class MyActivity extends ActionBarActivity {
 
                 LatLng point = new LatLng(location.getLatitude(),
                         location.getLongitude());
-                MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(point,
-                        mBaiduMap.getMapStatus().zoom);
-                mBaiduMap.animateMapStatus(u);
+                if (BTN_LOC_ISCLICK || BTN_TRACK_ISCLICK) {
+                    MapStatusUpdate u = MapStatusUpdateFactory.newLatLngZoom(point,
+                            mBaiduMap.getMapStatus().zoom);
+                    mBaiduMap.animateMapStatus(u);
 
-                Message msg = new Message();
-                msg.what = 0;
-                msg.obj = point;
-                handler.sendMessage(msg);
+                    if (BTN_LOC_ISCLICK) {
+                        Message msg = new Message();
+                        msg.what = MSG_WHAT_LOC;
+                        msg.obj = point;
+                        handler.sendMessage(msg);
+                        BTN_LOC_ISCLICK = false;
+                    }
+                }
+
+                if (BTN_TRACK_ISCLICK) {
+                    Message msg = new Message();
+                    msg.what = MSG_WHAT_TRACK;
+                    msg.obj = point;
+                    handler.sendMessage(msg);
+                }
             }
         }
 
