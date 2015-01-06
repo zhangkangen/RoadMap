@@ -6,5 +6,6 @@
     <string name="action_settings">Settings</string>
     <string name="title_activity_history">HistoryActivity</string>
     <string name="title_activity_history_detail">HistoryDetail</string>
+    <string name="title_activity_common">CommonActivity</string>
 
 </resources>

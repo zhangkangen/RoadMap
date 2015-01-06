@@ -12,6 +12,7 @@ import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -89,6 +90,7 @@ public class MyActivity extends ActionBarActivity {
     List<LatLng> pointList = new ArrayList<LatLng>();
     List<LatLng> disPointList = new ArrayList<LatLng>();
 
+    private boolean isExit;
     private float DIS = 0;
     private boolean BTN_DIS_ISCLICK = false;
     private boolean BTN_LOC_ISCLICK = false;
@@ -132,7 +134,7 @@ public class MyActivity extends ActionBarActivity {
                     break;
                 case MSG_WHAT_LOC:
                     displayToast("定位成功", Toast.LENGTH_SHORT);
-                    locLatLng = (LatLng)msg.obj;
+                    locLatLng = (LatLng) msg.obj;
                     BTN_LOC_ISCLICK = false;
                     break;
                 default:
@@ -191,6 +193,7 @@ public class MyActivity extends ActionBarActivity {
             //displayToast("截图" + bitmap.getHeight());
         }
     };
+
 
     private void shareToQzone(final Bundle params) {
         final Activity activity = MyActivity.this;
@@ -279,7 +282,7 @@ public class MyActivity extends ActionBarActivity {
         mBaiduMap.setOnMyLocationClickListener(new BaiduMap.OnMyLocationClickListener() {
             @Override
             public boolean onMyLocationClick() {
-                if(BTN_DIS_ISCLICK){
+                if (BTN_DIS_ISCLICK) {
                     getDistance(locLatLng);
                 }
                 return true;
@@ -373,7 +376,7 @@ public class MyActivity extends ActionBarActivity {
         btnLoc.setOnClickListener(clickListener);
 
         //轨迹记录
-        btnTrack =(Button)findViewById(R.id.btn_track);
+        btnTrack = (Button) findViewById(R.id.btn_track);
         btnTrack.setOnClickListener(clickListener);
 
     }
@@ -391,54 +394,6 @@ public class MyActivity extends ActionBarActivity {
         }
     }
 
-    /**
-     * Volley获取网络数据
-     */
-    public void getJSONByVolley() {
-        String result = null;
-        RequestQueue requestQueue = Volley.newRequestQueue(this);
-        String strUrl = "http://api.showji.com/Locating/www.show.ji.c.o.m.aspx?m=18766586588&output=json&callback=querycallback&timestamp=1409020493933";
-        final ProgressDialog progressDialog = ProgressDialog.show(this,
-                "this is title", "...loading...");
-
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, strUrl, null, new Response.Listener<JSONObject>() {
-
-            @Override
-            public void onResponse(JSONObject jsonObject) {
-
-            }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError volleyError) {
-
-            }
-        });
-
-        StringRequest getRequest = new StringRequest(Request.Method.GET,
-                strUrl, new Response.Listener<String>() {
-
-            @Override
-            public void onResponse(String arg0) {
-                // TODO Auto-generated method stub
-                if (progressDialog.isShowing() && progressDialog != null) {
-                    progressDialog.dismiss();
-                }
-                //接收返回数据
-            }
-        }, new Response.ErrorListener() {
-
-            @Override
-            public void onErrorResponse(VolleyError arg0) {
-                // TODO Auto-generated method stub
-                if (progressDialog.isShowing() && progressDialog != null) {
-                    progressDialog.dismiss();
-                }
-
-                displayToast("出现了错误");
-            }
-        });
-        requestQueue.add(getRequest);
-    }
 
     public void onClickShare() {
         final Bundle params = new Bundle();
@@ -610,10 +565,45 @@ public class MyActivity extends ActionBarActivity {
             case R.id.action_share:
                 shareToQzoneClick();
                 return true;
+            case R.id.action_searchWeather:
+                Intent intentCommon = new Intent(MyActivity.this, CommonActivity.class);
+                startActivity(intentCommon);
+                return true;
         }
 
         return super.onOptionsItemSelected(item);
     }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            exit();
+            return false;
+        } else {
+            return super.onKeyDown(keyCode, event);
+        }
+    }
+
+    private void exit() {
+        if (!isExit) {
+            isExit = true;
+            Toast.makeText(getApplicationContext(), "再按一次返回键退出", Toast.LENGTH_SHORT).show();
+            mHandler.sendEmptyMessageDelayed(0,2000);
+        }else{
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_HOME);
+            startActivity(intent);
+            System.exit(0);
+        }
+    }
+
+    Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            isExit = false;
+        }
+    };
 
     public class MyBDLocationListener implements BDLocationListener {
 
